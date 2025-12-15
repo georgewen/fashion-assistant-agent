@@ -15,6 +15,12 @@ from ..bedrock_agent.prompt import agent_instructions
 from constructs import Construct
 import os
 
+# Map string to Lambda architecture
+arch_map = {
+    "ARM_64": lambda_.Architecture.ARM_64,
+    "X86_64": lambda_.Architecture.X86_64,
+}
+
 
 class FashionAgentStack(cdk.Stack):
     def __init__(
@@ -149,11 +155,14 @@ class FashionAgentStack(cdk.Stack):
             opensearch_endpoint_url = ""
             opensearch_arn = ""
 
+        lambda_arch = arch_map.get(config.get("lambda_architecture", "ARM_64"), lambda_.Architecture.ARM_64)
+
         os_custom_layer = PythonLayerVersion(
             self,
             f'{config["agent_name"]}-Layer',
             entry="./components/layers/opensearch_layer",
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_12],
+            compatible_architectures=[lambda_arch],
         )
         # Create lambda function
         self.lambda_function = lambda_.Function(
@@ -165,6 +174,7 @@ class FashionAgentStack(cdk.Stack):
             role=self.lambda_role,
             code=lambda_.Code.from_asset("components/lambda/agent"),
             handler="lambda_function.lambda_handler",
+            architecture=lambda_arch,
             environment={
                 "region_info": self.region,
                 "s3_bucket": bucket.bucket_name,
@@ -172,20 +182,9 @@ class FashionAgentStack(cdk.Stack):
                 "index_name": config["opensearch"]["opensearch_index_name"],
                 "embeddingSize": config["embeddingSize"],
             },
-            layers=[
-                lambda_.LayerVersion.from_layer_version_arn(
-                    self,
-                    "PillowLayer",
-                    layer_version_arn=f"arn:aws:lambda:{self.region}:770693421928:layer:Klayers-p312-Pillow:2",
-                ),
-                lambda_.LayerVersion.from_layer_version_arn(
-                    self,
-                    "RequestsLayer",
-                    layer_version_arn=f"arn:aws:lambda:{self.region}:770693421928:layer:Klayers-p312-requests:6",
-                ),
-                os_custom_layer,
-            ],
+            layers=[os_custom_layer]
         )
+        self.nag_suppressed_resources.append(self.lambda_function)
 
         self.lambda_cloudwatch_access_policy = iam.Policy(
             self,
@@ -315,6 +314,10 @@ class FashionAgentStack(cdk.Stack):
                     "card for resources is used only for "
                     "services"
                     "which do not have a resource arn",
+                ),
+                NagPackSuppression(
+                    id="AwsSolutions-L1",
+                    reason="Lambda function is already using the latest Python runtime (3.12)",
                 )
             ],
             apply_to_children=True,

@@ -270,6 +270,9 @@ def image_lookup(event, host):
             output_s3_location = "s3://" + bucket_name + "/" + output_key
             s3_client.upload_fileobj(image_data, bucket_name, output_key)
             response = {"body": output_s3_location, "response_code": 200}
+            
+            logger.info(f"Image lookup successful: {response}")
+
         else:
             response = {"body": "", "response_code": 400}
     except Exception as e:
@@ -279,8 +282,8 @@ def image_lookup(event, host):
             "response_code": 400,
         }
     # If the response_code is 400 - return the original input image
-    if input_image and (input_image != "None"):
-        response["body"] = input_image
+    # if input_image and (input_image != "None"):
+    #     response["body"] = input_image
 
     logger.info(f"Image lookup response: {response}")
     return response
@@ -525,7 +528,7 @@ def titan_image(
     num_image: int = 1,
     cfg: float = 10.0,
     seed: int = None,
-    modelId: str = "amazon.titan-image-generator-v2",
+    modelId: str = "amazon.titan-image-generator-v2:0",
 ) -> list:
     """
     Generate images using the Titan Image Generator model.
